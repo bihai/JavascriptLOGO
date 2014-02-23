@@ -1,0 +1,230 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>LOGO Testing</title>
+	</head>
+	<body>
+
+		<h3>LOGO Canvas Testing</h3>
+
+		<div id="drawingArea" style="float:left;">
+			<canvas id="myCanvas" width="500" height="500" style="border:1px solid #000000" ></canvas>
+		</div>
+
+		<div id="commandArea">
+			
+				<textarea id="cmdlist" rows="25" cols="50"></textarea><br/>
+				<input type="button" onclick="draw()" value="Execute Slowly">
+				<input type="button" onclick="drawPaced()" value="Execute Quickly">
+			
+		</div>
+
+		<script>
+
+		// Parser
+		function parsecmds() {
+			var cmds = document.getElementById("cmdlist").value;
+			
+			cmds = cmds.replace('\[',' \[ ');
+			cmds = cmds.replace('\]',' \] ');
+			tokens = cmds.split(/\s+/);
+
+			for (var i=0, cmdlen = tokens.length; i < cmdlen; i++){
+				switch(tokens[i]) {
+					case "FORWARD":
+					case "FD":
+						size = tokens[i+1];
+						i++;
+						forward(size);
+						break;
+					case "RIGHT":
+					case "RT":
+						angle = tokens[i+1];
+						i++;
+						turnTurtle(angle);
+						break;
+					case "LEFT":
+					case "LT":
+						angle = tokens[i+1];
+						i++
+						turnTurtle(-angle);
+						break;
+					case "PENUP":
+					case "PU":
+						penup();
+						break;
+					case "PENDOWN":
+					case "PD":
+						pendown();
+						break;
+					case "CS":
+						clearCanvas();
+						resetTurtle();
+						points.length = 0;
+						break;
+					case "REPEAT":
+						rcount = tokens[i+1];
+						i++;
+						
+						// FORWARD LOOK for other ]
+						var startPos = i;
+						var endPos = undefined
+						for(var j=i; j < tokens.length; j++) {
+							if (tokens[j] == "]") {
+								endPos = j
+							}
+						}
+
+						var repeatedCmds = tokens.slice(i,j);
+						break;
+
+				}
+			}	
+		}
+
+
+		// Our Drawing Functions are below
+		function resetTurtle() {
+			turtle['angle'] = 0
+			turtle['penDown'] = true
+			turtle['currentLoc'] = {x: c.width/2, y: c.height/2}		
+		}
+
+		var c = document.getElementById("myCanvas");
+		var ctx = c.getContext("2d");
+		
+		var turtle = new Object();
+		resetTurtle()
+
+		var points = [],
+	    currentPoint = 1,
+	    nextTime = new Date().getTime()+500,
+    	pace = 100;
+
+
+		function toRadians (angle) {
+ 			return angle * (Math.PI / 180);
+		}
+
+		function penup() {
+			turtle['penDown'] = false
+		}
+
+		function pendown() {
+			turtle['penDown'] = true
+		}
+
+		// TODO:  We only support integer lengths right now....
+		//        Need to make fractional work
+		function forward(size) {
+			
+			// Calculate where the next point will be 
+			var newLoc = {	x: Math.cos(toRadians(turtle['angle']-90)),
+							y: Math.sin(toRadians(turtle['angle']-90))
+						 }
+
+			if (turtle['penDown']) {  // We're drawing
+				
+				// Push our current location onto the point array
+				points.push({
+					x: turtle['currentLoc'].x,
+					y: turtle['currentLoc'].y
+				})
+
+				// Calculate and add the points to the point array
+				for (var i=1; i <= size; i++) {
+				
+					points.push({
+						x: turtle['currentLoc'].x + newLoc.x,
+						y: turtle['currentLoc'].y + newLoc.y
+					})
+
+					turtle['currentLoc'].x = turtle['currentLoc'].x + newLoc.x;
+					turtle['currentLoc'].y = turtle['currentLoc'].y + newLoc.y;
+
+				}
+			
+			} else {  // We're just moving
+		
+					points.push(false);
+					turtle['currentLoc'].x = turtle['currentLoc'].x + (size * newLoc.x);
+					turtle['currentLoc'].y = turtle['currentLoc'].y + (size * newLoc.y)
+			
+			}
+		
+		}
+
+		function turnTurtle(degrees,direction) {
+			turtle['angle'] = turtle['angle'] + degrees;
+			if (turtle['angle'] >= 360) {
+				turtle['angle'] = turtle['angle'] - 360
+			}
+		}
+
+		function clearCanvas() {
+			ctx.clearRect(0,0, c.width, c.height);
+		}
+
+		function draw() {
+    		// draw a canvas stroke at a time
+    		ctx.beginPath();
+    		ctx.moveTo(points[0].x, points[0].y);
+    		ctx.lineWidth = 2;
+    		ctx.strokeStyle = '#2068A8';
+    		ctx.fillStyle = '#2068A8';
+    		for (var p = 1, plen = points.length; p < plen; p++) {
+				if (points[p] == false) {
+					ctx.stroke();
+					p++;
+					if (points[p] != undefined) {
+						ctx.moveTo(points[p].x,points[p].y)
+					}
+				}
+				ctx.lineTo(points[p].x, points[p].y);
+    		}
+    		ctx.stroke();
+
+    		points.length = 0;
+    		currentPoint = 0;
+
+		}
+
+		function drawPaced() {
+			// draw slowly at pace
+    		if (new Date().getTime() > nextTime) {
+        		nextTime = new Date().getTime() + pace;
+
+        		currentPoint++;
+        		if(currentPoint > points.length){
+        			// Clean up the array
+        			points.length = 0
+        			currentPoint = 0
+        		    return;
+        		}
+    		} 
+    		ctx.beginPath();
+    		ctx.moveTo(points[0].x, points[0].y);
+    		ctx.lineWidth = 2;
+    		ctx.strokeStyle = '#2068A8';
+    		ctx.fillStyle = '#2068A8';
+    		for (var p = 1, plen = currentPoint; p < plen; p++) {
+
+				if (points[p] == false) {  // if the pen is up at this point, the next point is the pen down
+					ctx.stroke();
+					p++;
+					if (points[p] != undefined) {
+						ctx.moveTo(points[p].x,points[p].y)
+					}
+				}
+				ctx.lineTo(points[p].x, points[p].y);
+    		}
+    		ctx.stroke();
+
+    		requestAnimationFrame(drawPaced);
+		}
+
+		</script>
+
+	</body>
+</html>
