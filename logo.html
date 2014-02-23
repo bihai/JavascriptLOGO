@@ -75,27 +75,41 @@
 						rcount = tokens[i+1];
 						i++;
 						
-						// FORWARD LOOK for other ]
+						// FORWARD LOOK for other ], but we need to watch out
+						// for nested repeats
+
 						var startPos = i+1;
-						var endPos = undefined
-						for(var j=startPos; j < tokens.length; j++) {
-							console.log(tokens[j])
+						var endPos = undefined;
+						var level = 1;
+						for(var j=startPos+1; j < tokens.length; j++) {
+							console.log(j + " - " + tokens[j] + " Level: " + level);
 							if (tokens[j] == "]") {
-								console.log("Found End");
-								endPos = j
+								if (level == 1) {	
+									console.log("Found End");
+									endPos = j;
+									break;
+								} else {
+									level--;
+								}
+							} else if (tokens[j] == "[") {   // This breaks on first time thru
+								level++;
 							}
 						}
 
 						var repeatedCmds = tokens.slice(startPos+1,endPos);
+
+						console.log("Repeated Commands")
+						console.log("startPos: " + startPos + " endPos: " + endPos);
+						console.log(repeatedCmds.join(','))
 						
-						console.log("before");
+						console.log("BEFORE");
 						console.log(tokens.join(','));
 						tokens.splice(startPos,repeatedCmds.length+2)  //Remove existing commands + the brackets
 						for(var j=0; j < rcount; j++) {
 							insertArrayAt(tokens,startPos,repeatedCmds)
 						}
 						cmdlen = tokens.length
-						console.log("after");
+						console.log("AFTER");
 						console.log(tokens.join(','));
 						console.log(i)
 						break;
