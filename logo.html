@@ -23,6 +23,10 @@
 		<script>
 
 		// Parser
+		function insertArrayAt(array, index, arrayToInsert) {
+    		Array.prototype.splice.apply(array, [index, 0].concat(arrayToInsert));
+		}	
+
 		function parsecmds() {
 			var cmds = document.getElementById("cmdlist").value;
 			
@@ -31,6 +35,7 @@
 			tokens = cmds.split(/\s+/);
 
 			for (var i=0, cmdlen = tokens.length; i < cmdlen; i++){
+				console.log("Current Command: " + tokens[i])
 				switch(tokens[i]) {
 					case "FORWARD":
 					case "FD":
@@ -40,13 +45,15 @@
 						break;
 					case "RIGHT":
 					case "RT":
-						angle = tokens[i+1];
+						angle = parseInt(tokens[i+1]);
+						console.log("Angle: "+angle)
 						i++;
 						turnTurtle(angle);
 						break;
 					case "LEFT":
 					case "LT":
-						angle = tokens[i+1];
+						angle = parseInt(tokens[i+1]);
+						console.log("Angle: "+angle)
 						i++
 						turnTurtle(-angle);
 						break;
@@ -64,19 +71,33 @@
 						points.length = 0;
 						break;
 					case "REPEAT":
+						// Maybe we need to move this to a pre-processor?
 						rcount = tokens[i+1];
 						i++;
 						
 						// FORWARD LOOK for other ]
-						var startPos = i;
+						var startPos = i+1;
 						var endPos = undefined
-						for(var j=i; j < tokens.length; j++) {
+						for(var j=startPos; j < tokens.length; j++) {
+							console.log(tokens[j])
 							if (tokens[j] == "]") {
+								console.log("Found End");
 								endPos = j
 							}
 						}
 
-						var repeatedCmds = tokens.slice(i,j);
+						var repeatedCmds = tokens.slice(startPos+1,endPos);
+						
+						console.log("before");
+						console.log(tokens.join(','));
+						tokens.splice(startPos,repeatedCmds.length+2)  //Remove existing commands + the brackets
+						for(var j=0; j < rcount; j++) {
+							insertArrayAt(tokens,startPos,repeatedCmds)
+						}
+						cmdlen = tokens.length
+						console.log("after");
+						console.log(tokens.join(','));
+						console.log(i)
 						break;
 
 				}
@@ -160,6 +181,7 @@
 			if (turtle['angle'] >= 360) {
 				turtle['angle'] = turtle['angle'] - 360
 			}
+			console.log("Turtle angle: " + turtle['angle'])
 		}
 
 		function clearCanvas() {
