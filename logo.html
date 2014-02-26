@@ -15,48 +15,125 @@
 		<div id="commandArea">
 			
 				<textarea id="cmdlist" rows="25" cols="50"></textarea><br/>
-				<input type="button" onclick="draw()" value="Execute Slowly">
-				<input type="button" onclick="drawPaced()" value="Execute Quickly">
+				<input type="button" onclick="interpret(parse(tokenize()))" value="Execute Quickly">
 			
 		</div>
 
 		<script>
 
-		// Parser
-		function insertArrayAt(array, index, arrayToInsert) {
-    		Array.prototype.splice.apply(array, [index, 0].concat(arrayToInsert));
-		}	
+		if (typeof String.prototype.startsWith != 'function') {
+  		// see below for better implementation!
+			String.prototype.startsWith = function (str){
+    			return this.indexOf(str) == 0;
+  			};
+		}
 
-		function parsecmds() {
+		// Tokenizer, Parser, and Interpreter
+		function tokenize() {
 			var cmds = document.getElementById("cmdlist").value;
-			
-			cmds = cmds.replace('\[',' \[ ');
-			cmds = cmds.replace('\]',' \] ');
-			tokens = cmds.split(/\s+/);
+			cmds = cmds.replace(/\[/g,' [ ');
+			cmds = cmds.replace(/\]/g,' ] ');
+			tokens = cmds.split(/\s+/);    // Yay, we've tokenized!
+			return tokens;
+		}
 
-			for (var i=0, cmdlen = tokens.length; i < cmdlen; i++){
-				console.log("Current Command: " + tokens[i])
-				switch(tokens[i]) {
+		var symbolTable = new Object;
+
+		function parse(tokens) {
+			var currentToken = 0;
+			var parseTree = [];
+			while (currentToken < tokens.length) {
+				switch (tokens[currentToken]) {
+					case "STOP":
+					case "PENUP":
+					case "PU":
+					case "PENDOWN":
+					case "PD":
+					case "HOME":
+					case "CLEARSCREEN":
+					case "CS":
+						parseTree.push({cmd: tokens[currentToken], 
+							            args: undefined});
+						break;
 					case "FORWARD":
 					case "FD":
-						size = tokens[i+1];
-						i++;
-						forward(size);
-						break;
-					case "RIGHT":
-					case "RT":
-						angle = parseInt(tokens[i+1]);
-						console.log("Angle: "+angle)
-						i++;
-						turnTurtle(angle);
-						break;
-					case "LEFT":
+					case "BACK":
+					case "BK":
 					case "LT":
-						angle = parseInt(tokens[i+1]);
-						console.log("Angle: "+angle)
-						i++
-						turnTurtle(-angle);
+					case "RT":
+						parseTree.push({cmd: tokens[currentToken], 
+							            args: tokens[currentToken+1]})
+						currentToken++;
 						break;
+					case "REPEAT":
+						var command = tokens[currentToken];
+						currentToken++;
+						var num = tokens[currentToken];
+						currentToken++;
+						currentToken++; // We should be on the first instruction after paren
+						
+						var parenDepth = 1;
+						var listTokens = [];
+						while (currentToken < tokens.length) {
+							
+							if (tokens[currentToken] == "]") { 
+								parenDepth -= 1;
+								if (parenDepth == 0) { break; }
+							} else if (tokens[currentToken] == "[") { 
+								parenDepth += 1;
+							} 
+
+							listTokens.push(tokens[currentToken]);
+							currentToken++;
+						}
+						parseTree.push({cmd:command, args: {cnt: num, tree: parse(listTokens)}});
+
+						break;
+					case "TO":
+						currentToken++;
+					    var command = tokens[currentToken];
+					    var listTokens=[];
+					    var paramlist=[];
+					    currentToken++;
+					    while (currentToken < tokens.length) {
+					    	if (tokens[currentToken].startsWith(":")) {
+					    		paramlist.push(tokens[currentToken])
+					    	}
+					        currentToken++;
+					    }
+					    while (currentToken < tokens.length) {
+					    	
+					    	if (tokens[currentToken] != "END") {
+					    		listTokens.push(tokens[currentToken]);
+					    		currentToken++;
+					    	} else {
+					    		break;
+					    	}
+					    }
+					    console.log(listTokens.join(','));
+					    symbolTable[command] = { params: paramlist, cmds: parse(listTokens) };
+					    console.log(symbolTable[command]);
+					    break;
+					default:  
+						// Check if it's a procedure we've defined
+						if (tokens[currentToken] in symbolTable) {
+							command = tokens[currentToken]
+							parseTree.push({cmd: command, args: { params: symbolTable[command].params, tree: symbolTable[command].cmds}});
+						} 
+				}
+				currentToken++;
+			}
+
+			return parseTree
+		}
+
+		function interpret(parseTree) {
+			var currentCommand = 0;
+			var cmds = parseTree.length
+			while (currentCommand < cmds) {
+				switch (parseTree[currentCommand].cmd) {
+					case "STOP":
+						return;
 					case "PENUP":
 					case "PU":
 						penup();
@@ -65,78 +142,63 @@
 					case "PD":
 						pendown();
 						break;
+					case "HOME":
+						resetTurtle();
+						break;
+					case "CLEARSCREEN":
 					case "CS":
 						clearCanvas();
-						resetTurtle();
-						points.length = 0;
+						break
+					case "FORWARD":
+					case "FD":
+						forward(parseInt(parseTree[currentCommand].args));
+						draw();
+						break;
+					case "BACK":
+					case "BK":
+						forward(-parseInt(parseTree[currentCommand].args));
+						draw();
+						break;
+					case "LT":
+						turnTurtle(-parseInt(parseTree[currentCommand].args));
+						break;
+					case "RT":
+						turnTurtle(parseInt(parseTree[currentCommand].args));
 						break;
 					case "REPEAT":
-						// Maybe we need to move this to a pre-processor?
-						rcount = tokens[i+1];
-						i++;
-						
-						// FORWARD LOOK for other ], but we need to watch out
-						// for nested repeats
-
-						var startPos = i+1;
-						var endPos = undefined;
-						var level = 1;
-						for(var j=startPos+1; j < tokens.length; j++) {
-							console.log(j + " - " + tokens[j] + " Level: " + level);
-							if (tokens[j] == "]") {
-								if (level == 1) {	
-									console.log("Found End");
-									endPos = j;
-									break;
-								} else {
-									level--;
-								}
-							} else if (tokens[j] == "[") {   // This breaks on first time thru
-								level++;
-							}
+						for (var i = 0; i < parseTree[currentCommand].args.cnt; i++) {
+							interpret(parseTree[currentCommand].args.tree);
 						}
-
-						var repeatedCmds = tokens.slice(startPos+1,endPos);
-
-						console.log("Repeated Commands")
-						console.log("startPos: " + startPos + " endPos: " + endPos);
-						console.log(repeatedCmds.join(','))
-						
-						console.log("BEFORE");
-						console.log(tokens.join(','));
-						tokens.splice(startPos,repeatedCmds.length+2)  //Remove existing commands + the brackets
-						for(var j=0; j < rcount; j++) {
-							insertArrayAt(tokens,startPos,repeatedCmds)
-						}
-						cmdlen = tokens.length
-						console.log("AFTER");
-						console.log(tokens.join(','));
-						console.log(i)
 						break;
-
+					default:
+						if (parseTree[currentCommand].cmd in symbolTable) {
+							interpret(parseTree[currentCommand].args.tree);
+						} 
 				}
-			}	
+				currentCommand++;
+			}
 		}
 
-
 		// Our Drawing Functions are below
+		
+		// Our HTML5 Canvas & it's context
+		var c = document.getElementById("myCanvas");
+		var ctx = c.getContext("2d");
+
+		// Some globals for tracking drawing objects
+		var points = [];
+	    var turtle = new Object();
+		resetTurtle()
+
+		// For timed drawing
+		nextTime = new Date().getTime()+500,
+    	pace = 10;
+
 		function resetTurtle() {
 			turtle['angle'] = 0
 			turtle['penDown'] = true
-			turtle['currentLoc'] = {x: c.width/2, y: c.height/2}		
+			turtle['currentLoc'] = {x: c.width/2, y: c.height/2}	
 		}
-
-		var c = document.getElementById("myCanvas");
-		var ctx = c.getContext("2d");
-		
-		var turtle = new Object();
-		resetTurtle()
-
-		var points = [],
-	    currentPoint = 1,
-	    nextTime = new Date().getTime()+500,
-    	pace = 100;
-
 
 		function toRadians (angle) {
  			return angle * (Math.PI / 180);
@@ -167,22 +229,19 @@
 					y: turtle['currentLoc'].y
 				})
 
-				// Calculate and add the points to the point array
-				for (var i=1; i <= size; i++) {
 				
-					points.push({
-						x: turtle['currentLoc'].x + newLoc.x,
-						y: turtle['currentLoc'].y + newLoc.y
-					})
+				points.push({
+					x: turtle['currentLoc'].x + (size * newLoc.x),
+					y: turtle['currentLoc'].y + (size * newLoc.y)
+				})
 
-					turtle['currentLoc'].x = turtle['currentLoc'].x + newLoc.x;
-					turtle['currentLoc'].y = turtle['currentLoc'].y + newLoc.y;
+				turtle['currentLoc'].x = turtle['currentLoc'].x + size * newLoc.x;
+				turtle['currentLoc'].y = turtle['currentLoc'].y + size * newLoc.y;
 
-				}
-			
+			    draw()
+
 			} else {  // We're just moving
-		
-					points.push(false);
+					console.log("PEN UP MOVE")
 					turtle['currentLoc'].x = turtle['currentLoc'].x + (size * newLoc.x);
 					turtle['currentLoc'].y = turtle['currentLoc'].y + (size * newLoc.y)
 			
@@ -190,75 +249,48 @@
 		
 		}
 
-		function turnTurtle(degrees,direction) {
+		function turnTurtle(degrees) {
 			turtle['angle'] = turtle['angle'] + degrees;
 			if (turtle['angle'] >= 360) {
 				turtle['angle'] = turtle['angle'] - 360
 			}
-			console.log("Turtle angle: " + turtle['angle'])
 		}
 
 		function clearCanvas() {
 			ctx.clearRect(0,0, c.width, c.height);
+			resetTurtle()
 		}
 
 		function draw() {
     		// draw a canvas stroke at a time
-    		ctx.beginPath();
-    		ctx.moveTo(points[0].x, points[0].y);
-    		ctx.lineWidth = 2;
-    		ctx.strokeStyle = '#2068A8';
-    		ctx.fillStyle = '#2068A8';
-    		for (var p = 1, plen = points.length; p < plen; p++) {
-				if (points[p] == false) {
-					ctx.stroke();
-					p++;
-					if (points[p] != undefined) {
-						ctx.moveTo(points[p].x,points[p].y)
-					}
-				}
-				ctx.lineTo(points[p].x, points[p].y);
+
+    		if (points[0] != undefined) {
+    			ctx.beginPath();
+    			ctx.moveTo(points[0].x,points[0].y);
+    			ctx.lineWidth = 2;
+    			ctx.strokeStyle = '#2068A8';
+    			ctx.fillStyle = '#2068A8';    			
+    		
+    			// If for some reason we HAD multiple points, then we 
+    			// could draw all the lines in the array, this is here
+    			// if we ever implement ARC or CIRCLE commands
+    			for (var p = 1, plen = points.length; p<plen; p++) {
+    				ctx.lineTo(points[p].x, points[p].y)
+    			}
+
+    			ctx.stroke();
+	 			points.length = 0;
+
     		}
-    		ctx.stroke();
+   		}
 
-    		points.length = 0;
-    		currentPoint = 0;
-
-		}
-
-		function drawPaced() {
-			// draw slowly at pace
-    		if (new Date().getTime() > nextTime) {
-        		nextTime = new Date().getTime() + pace;
-
-        		currentPoint++;
-        		if(currentPoint > points.length){
-        			// Clean up the array
-        			points.length = 0
-        			currentPoint = 0
-        		    return;
-        		}
-    		} 
-    		ctx.beginPath();
-    		ctx.moveTo(points[0].x, points[0].y);
-    		ctx.lineWidth = 2;
-    		ctx.strokeStyle = '#2068A8';
-    		ctx.fillStyle = '#2068A8';
-    		for (var p = 1, plen = currentPoint; p < plen; p++) {
-
-				if (points[p] == false) {  // if the pen is up at this point, the next point is the pen down
-					ctx.stroke();
-					p++;
-					if (points[p] != undefined) {
-						ctx.moveTo(points[p].x,points[p].y)
-					}
-				}
-				ctx.lineTo(points[p].x, points[p].y);
-    		}
-    		ctx.stroke();
-
-    		requestAnimationFrame(drawPaced);
-		}
+        function currentLocPoint() {
+        	points.push({
+					x: turtle['currentLoc'].x,
+					y: turtle['currentLoc'].y
+				});
+        	return;
+        }
 
 		</script>
 
